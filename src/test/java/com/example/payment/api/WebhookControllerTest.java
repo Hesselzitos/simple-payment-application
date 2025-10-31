@@ -11,7 +11,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -21,12 +22,14 @@ import java.util.List;
 import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(controllers = WebhookController.class)
+@Import(WebhookControllerTest.TestConfig.class)
 class WebhookControllerTest {
 
     @Autowired
@@ -35,8 +38,15 @@ class WebhookControllerTest {
     @Autowired
     ObjectMapper objectMapper;
 
-    @MockBean
+    @Autowired
     WebhookService webhookService;
+
+    static class TestConfig {
+        @Bean
+        public WebhookService webhookService() {
+            return mock(WebhookService.class);
+        }
+    }
 
     @Test
     void shouldListActive() throws Exception {
@@ -91,7 +101,8 @@ class WebhookControllerTest {
 
             // Service performs URL validation and throws IllegalArgumentException
             if (!url.isBlank()) {
-                given(webhookService.register(url)).willThrow(new IllegalArgumentException("Invalid endpointUrl: bad url"));
+                given(webhookService.register(url))
+                        .willThrow(new IllegalArgumentException("Invalid endpointUrl: bad url"));
             }
 
             mockMvc.perform(post("/api/webhooks")

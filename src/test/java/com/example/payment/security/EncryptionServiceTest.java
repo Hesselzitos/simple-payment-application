@@ -1,47 +1,69 @@
 package com.example.payment.security;
 
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
+import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class EncryptionServiceTest {
 
-    private static SecretKey newKey() {
-        try {
-            KeyGenerator kg = KeyGenerator.getInstance("AES");
-            kg.init(128);
-            return kg.generateKey();
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+    private EncryptionService encryptionService;
+    private String validKeyBase64;
+
+    @BeforeEach
+    void setUp() {
+        // Generate a random valid 256-bit key for testing
+        byte[] keyBytes = new byte[32]; // 32 bytes = 256 bits
+        for (int i = 0; i < keyBytes.length; i++) keyBytes[i] = (byte) i; // deterministic for test
+        validKeyBase64 = Base64.getEncoder().encodeToString(keyBytes);
+
+        encryptionService = new EncryptionService(validKeyBase64);
     }
 
-    @ParameterizedTest
-    @DisplayName("encrypt/decrypt round-trip with various inputs")
-    @ValueSource(strings = {
-            "hello",
-            "",
-            "1234567890",
-            "unicode-åß∂ƒ©",
-            "multi line\nvalue"
-    })
-    void shouldEncryptAndDecryptRoundTrip(String input) {
-        // given
-        EncryptionService service = new EncryptionService(newKey());
+    @Test
+    void testEncryptDecrypt() {
+        String plaintext = "Hello World!";
+        String encrypted = encryptionService.encrypt(plaintext);
 
-        // when
-        String enc = service.encrypt(input);
-        String dec = service.decrypt(enc);
+        assertNotNull(encrypted);
+        assertTrue(encrypted.contains(":")); // iv:ciphertext format
 
-        // then
-        assertNotNull(enc);
-        assertFalse(enc.isBlank());
-        assertEquals(input, dec);
-        assertTrue(enc.contains(":"), "format should be iv:ciphertext");
+        String decrypted = encryptionService.decrypt(encrypted);
+        assertEquals(plaintext, decrypted);
+    }
+
+    @Test
+    void testInvalidKeyLength() {
+        byte[] invalidKey = new byte[20];
+        String invalidKeyBase64 = Base64.getEncoder().encodeToString(invalidKey);
+
+        RuntimeException exception = assertThrows(RuntimeException.class,
+                () -> new EncryptionService(invalidKeyBase64));
+        assertTrue(exception.getMessage().contains("Invalid Base64 or AES key configuration"));
+    }
+
+
+    @Test
+    void testDecryptInvalidFormat() {
+        String invalidCiphertext = "this-is-not-valid";
+
+        RuntimeException exception = assertThrows(RuntimeException.class,
+                () -> encryptionService.decrypt(invalidCiphertext));
+        assertTrue(exception.getMessage().contains("Decryption failure"));
+    }
+
+    @Test
+    void testDecryptWithTamperedCiphertext() {
+        String plaintext = "Sensitive data";
+        String encrypted = encryptionService.encrypt(plaintext);
+
+        // Tamper with ciphertext
+        String tampered = encrypted.substring(0, encrypted.length() - 1) + "A";
+
+        RuntimeException exception = assertThrows(RuntimeException.class,
+                () -> encryptionService.decrypt(tampered));
+        assertTrue(exception.getMessage().contains("Decryption failure"));
     }
 }

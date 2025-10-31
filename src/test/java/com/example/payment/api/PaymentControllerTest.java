@@ -11,7 +11,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -24,7 +24,8 @@ import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(controllers = PaymentController.class)
+@WebMvcTest(PaymentController.class)
+@Import(PaymentControllerTest.TestConfig.class)
 class PaymentControllerTest {
 
     @Autowired
@@ -33,8 +34,15 @@ class PaymentControllerTest {
     @Autowired
     ObjectMapper objectMapper;
 
-    @MockBean
+    @Autowired
     PaymentService paymentService;
+
+    static class TestConfig {
+        @org.springframework.context.annotation.Bean
+        public PaymentService paymentService() {
+            return org.mockito.Mockito.mock(PaymentService.class);
+        }
+    }
 
     private static Stream<PaymentRequest> invalidRequests() {
         PaymentRequest r1 = new PaymentRequest();
