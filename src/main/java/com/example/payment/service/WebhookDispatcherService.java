@@ -8,10 +8,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.BodyInserters;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -22,7 +24,7 @@ public class WebhookDispatcherService {
     private static final Logger log = LoggerFactory.getLogger(WebhookDispatcherService.class);
 
     private final WebhookEventRepository repository;
-    private final WebClient webClient;
+    private final HttpClient httpClient;
 
     private final boolean enabled;
     private final int maxAttempts;
@@ -30,13 +32,13 @@ public class WebhookDispatcherService {
     private final long maxBackoffMs;
 
     public WebhookDispatcherService(WebhookEventRepository repository,
-                                    WebClient webClient,
+                                    HttpClient httpClient,
                                     @Value("${webhook.dispatch.enabled:true}") boolean enabled,
                                     @Value("${webhook.dispatch.max-attempts:8}") int maxAttempts,
                                     @Value("${webhook.dispatch.base-backoff-ms:2000}") long baseBackoffMs,
                                     @Value("${webhook.dispatch.max-backoff-ms:120000}") long maxBackoffMs) {
         this.repository = repository;
-        this.webClient = webClient;
+        this.httpClient = httpClient;
         this.enabled = enabled;
         this.maxAttempts = maxAttempts;
         this.baseBackoffMs = baseBackoffMs;
@@ -58,17 +60,23 @@ public class WebhookDispatcherService {
         ev.setAttempts(ev.getAttempts() + 1);
         try {
             int attempt = ev.getAttempts();
-            Mono<Integer> result = webClient.post()
-                    .uri(ev.getTargetUrl())
-                    .body(BodyInserters.fromValue(ev.getPayloadJson()))
-                    .retrieve()
-                    .toBodilessEntity()
-                    .map(resp -> resp.getStatusCode().value())
-                    .onErrorResume(ex -> {
-                        log.warn("Webhook POST to {} failed: {}", ev.getTargetUrl(), ex.toString());
-                        return Mono.just(599); // custom network error
-                    });
-            int status = result.blockOptional().orElse(599);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(ev.getTargetUrl()))
+                    .timeout(Duration.ofSeconds(30))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(ev.getPayloadJson()))
+                    .build();
+
+            int status;
+            try {
+                HttpResponse<Void> response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+                status = response.statusCode();
+            } catch (Exception ex) {
+                log.warn("Webhook POST to {} failed: {}", ev.getTargetUrl(), ex.toString());
+                status = 599; // custom network error
+            }
+
             if (status >= 200 && status < 300) {
                 ev.setStatus(WebhookStatus.DELIVERED);
                 ev.setNextAttemptAt(null);
