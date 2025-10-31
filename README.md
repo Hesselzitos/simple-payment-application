@@ -1,4 +1,3 @@
-```markdown
 # 💳 Payment API with Dynamic Webhooks
 
 A simple payment processing API built with Java 24 + Spring Boot 3.3 + MongoDB. It demonstrates:
