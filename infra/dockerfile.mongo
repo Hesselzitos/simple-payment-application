@@ -1,0 +1,13 @@
+# Use the official MongoDB image as base
+FROM mongo:6.0
+
+# Environment variables for initial setup
+ENV MONGO_INITDB_ROOT_USERNAME=admin
+ENV MONGO_INITDB_ROOT_PASSWORD=admin123
+ENV MONGO_INITDB_DATABASE=paymentsdb
+
+# Expose default MongoDB port
+EXPOSE 27017
+
+# Optional: copy init scripts if you want to pre-create collections
+COPY init-db/ /docker-entrypoint-initdb.d/

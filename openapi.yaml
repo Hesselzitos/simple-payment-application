@@ -1,0 +1,186 @@
+openapi: 3.0.3
+info:
+  title: Payment API with Dynamic Webhooks
+  version: 1.0.0
+  description: |
+    Simple payment processing API that stores card numbers encrypted and sends dynamic webhooks
+    after each new payment. Built with Java 24, Spring Boot, and MongoDB.
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/payments:
+    post:
+      summary: Create a payment
+      operationId: createPayment
+      tags: [ payments ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+            examples:
+              basic:
+                summary: Valid payment
+                value:
+                  firstName: Jane
+                  lastName: Doe
+                  zipCode: "94105"
+                  cardNumber: "4242424242424242"
+      responses:
+        '201':
+          description: Payment created
+          headers:
+            Location:
+              description: Resource location
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+              examples:
+                created:
+                  value:
+                    id: 665a2b9f1e2f4c6d8a7b9012
+                    firstName: Jane
+                    lastName: Doe
+                    zipCode: "94105"
+                    cardLast4: "4242"
+                    createdAt: "2025-10-30T15:04:05Z"
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+  /api/webhooks:
+    post:
+      summary: Register a webhook endpoint
+      operationId: registerWebhook
+      tags: [ webhooks ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookRegisterRequest'
+            examples:
+              register:
+                value:
+                  endpointUrl: "https://webhook.site/your-endpoint"
+      responses:
+        '201':
+          description: Webhook registered (idempotent; will reactivate if existing)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookRegistration'
+        '400':
+          description: Invalid URL or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Duplicate resource
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Server error
+    get:
+      summary: List active webhooks
+      operationId: listWebhooks
+      tags: [ webhooks ]
+      responses:
+        '200':
+          description: Active webhooks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WebhookRegistration'
+components:
+  schemas:
+    PaymentRequest:
+      type: object
+      required: [ firstName, lastName, zipCode, cardNumber ]
+      properties:
+        firstName:
+          type: string
+          example: Jane
+        lastName:
+          type: string
+          example: Doe
+        zipCode:
+          type: string
+          description: Postal code (5-10 chars, digits/hyphen/space)
+          example: "94105"
+        cardNumber:
+          type: string
+          description: 12-19 digits, will be encrypted at rest
+          example: "4242424242424242"
+    PaymentResponse:
+      type: object
+      required: [ id, firstName, lastName, zipCode, cardLast4, createdAt ]
+      properties:
+        id:
+          type: string
+          example: 665a2b9f1e2f4c6d8a7b9012
+        firstName:
+          type: string
+          example: Jane
+        lastName:
+          type: string
+          example: Doe
+        zipCode:
+          type: string
+          example: "94105"
+        cardLast4:
+          type: string
+          example: "4242"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-10-30T15:04:05Z"
+    WebhookRegisterRequest:
+      type: object
+      required: [ endpointUrl ]
+      properties:
+        endpointUrl:
+          type: string
+          format: uri
+          example: "https://webhook.site/your-endpoint"
+    WebhookRegistration:
+      type: object
+      required: [ id, endpointUrl, active, createdAt ]
+      properties:
+        id:
+          type: string
+          example: 665a2b9f1e2f4c6d8a7b90aa
+        endpointUrl:
+          type: string
+          format: uri
+          example: "https://webhook.site/your-endpoint"
+        active:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-10-30T15:04:05Z"
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Validation failed
+        errors:
+          type: object
+          additionalProperties:
+            type: string
